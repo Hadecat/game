@@ -92,7 +92,7 @@ class Skull(AnimatedSprite):
         else:
             self.rect.y += mov[direction][1]
             self.y += mov[direction][1] // 80
-            if pygame.sprite.spritecollide(self, walls, False) or self.y not in range(1, 14):
+            if pygame.sprite.spritecollide(self, walls, False) or self.y not in range(1, 8):
                 self.rect.y -= mov[direction][1]
                 self.y -= mov[direction][1] // 80
                 move_success = False
@@ -115,22 +115,30 @@ class Enemy(AnimatedSprite):
         self.add(enemies)
 
     def where_to_move(self, mc, walls_pos):
-        possible_moves = list()
+        possible_moves, leftover_moves = list(), [97, 100, 115, 119]
         if mc.rect.x < self.rect.x:
             possible_moves.append(97)
+            leftover_moves.remove(97)
         elif mc.rect.x > self.rect.x:
             possible_moves.append(100)
+            leftover_moves.remove(100)
         if mc.rect.y < self.rect.y:
             possible_moves.append(119)
+            leftover_moves.remove(119)
         elif mc.rect.y > self.rect.y:
             possible_moves.append(115)
+            leftover_moves.remove(115)
         move_success = False
         direction = 0
+        tries = 5
         while not move_success:
-            direction = possible_moves[randint(0, len(possible_moves)) - 1]
+            if tries == 0:
+                break
+            direction = possible_moves[randint(0, len(possible_moves) - 1)]
             if mov[direction][0] == "x":
                 if (self.coords()[0] + mov[direction][1] // 80, self.coords()[1]) in walls_pos or \
                         self.x not in range(1, 15):
+                    tries -= 1
                     continue
                 if direction == 97 and not self.is_flipped():
                     self.flip()
@@ -139,10 +147,21 @@ class Enemy(AnimatedSprite):
                 self.x += mov[direction][1] // 80
             else:
                 if (self.coords()[0], self.coords()[1] + mov[direction][1] // 80) in walls_pos or \
-                        self.x not in range(1, 15):
+                        self.y not in range(1, 8):
+                    tries -= 1
                     continue
                 self.y += mov[direction][1] // 80
             move_success = True
+        if tries == 0:
+            direction = leftover_moves[randint(0, len(leftover_moves) - 1)]
+            if mov[direction][0] == "x":
+                if direction == 97 and not self.is_flipped():
+                    self.flip()
+                elif direction == 100 and self.is_flipped():
+                    self.flip()
+                self.x += mov[direction][1] // 80
+            else:
+                self.y += mov[direction][1] // 80
         return mov[direction]
 
     def coords(self):
