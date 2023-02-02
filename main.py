@@ -1,11 +1,11 @@
 import os
 import sys
-import random
+from random import randint
 import pygame
 
 
 def load_image(name, color_key=None):
-    fullname = os.path.join('data', name)
+    fullname = os.path.join('data/Sprites', name)
     image = pygame.image.load(fullname)
     if color_key is not None:
         image = image.convert()
@@ -17,14 +17,16 @@ def load_image(name, color_key=None):
     return image
 
 
+def load_sound(name):
+    return pygame.mixer.Sound('data/Sounds/' + name)
+
+
 def load_level(filename):
-    filename = "data/" + filename
+    filename = "data/Maps/" + filename
     with open(filename, 'r') as mapFile:
         level_map = [line.strip() for line in mapFile]
 
-    max_width = max(map(len, level_map))
-
-    return list(map(lambda x: x.ljust(max_width, '.'), level_map))
+    return list(map(lambda x: x.ljust(14, '.'), level_map))
 
 
 class AnimatedSprite(pygame.sprite.Sprite):
@@ -83,14 +85,16 @@ class Skull(AnimatedSprite):
                 self.flip()
             self.rect.x += mov[direction][1]
             self.x += mov[direction][1] // 80
-            if pygame.sprite.spritecollide(self, walls, False):
+            if pygame.sprite.spritecollide(self, walls, False) or self.x not in range(1, 15):
                 self.rect.x -= mov[direction][1]
+                self.x -= mov[direction][1] // 80
                 move_success = False
         else:
             self.rect.y += mov[direction][1]
             self.y += mov[direction][1] // 80
-            if pygame.sprite.spritecollide(self, walls, False):
+            if pygame.sprite.spritecollide(self, walls, False) or self.y not in range(1, 14):
                 self.rect.y -= mov[direction][1]
+                self.y -= mov[direction][1] // 80
                 move_success = False
         return move_success
 
@@ -123,9 +127,10 @@ class Enemy(AnimatedSprite):
         move_success = False
         direction = 0
         while not move_success:
-            direction = possible_moves[random.randint(0, len(possible_moves)) - 1]
+            direction = possible_moves[randint(0, len(possible_moves)) - 1]
             if mov[direction][0] == "x":
-                if (self.coords()[0] + mov[direction][1], self.coords()[1]) in walls_pos:
+                if (self.coords()[0] + mov[direction][1] // 80, self.coords()[1]) in walls_pos or \
+                        self.x not in range(1, 15):
                     continue
                 if direction == 97 and not self.is_flipped():
                     self.flip()
@@ -133,7 +138,8 @@ class Enemy(AnimatedSprite):
                     self.flip()
                 self.x += mov[direction][1] // 80
             else:
-                if (self.coords()[0], self.coords()[1] + mov[direction][1]) in walls_pos:
+                if (self.coords()[0], self.coords()[1] + mov[direction][1] // 80) in walls_pos or \
+                        self.x not in range(1, 15):
                     continue
                 self.y += mov[direction][1] // 80
             move_success = True
@@ -158,8 +164,10 @@ def start_screen():
             if event.type == pygame.KEYUP:
                 if event.key in mov:
                     current_coords = (current_coords + 1) % 2
+                    click.play()
                 elif not current_coords:
                     if event.key == pygame.K_RETURN:
+                        select.play()
                         return
                 elif current_coords:
                     if event.key == pygame.K_RETURN:
@@ -197,7 +205,9 @@ def pause():
             if event.type == pygame.KEYUP:
                 if event.key in mov:
                     current_coords = (current_coords + 1) % 2
+                    click.play()
                 elif not current_coords:
+                    select.play()
                     if event.key == pygame.K_RETURN:
                         return
                 elif current_coords:
@@ -213,6 +223,7 @@ def pause():
 
 
 def game_over():
+    game_over_sound.play()
     coords, current_coords = [(375, 520), (470, 615)], 0
     cursor = load_image("cursor.png", -1)
     while True:
@@ -222,7 +233,9 @@ def game_over():
             if event.type == pygame.KEYUP:
                 if event.key in mov:
                     current_coords = (current_coords + 1) % 2
+                    click.play()
                 elif not current_coords:
+                    select.play()
                     if event.key == pygame.K_RETURN:
                         return
                 elif current_coords:
@@ -238,6 +251,7 @@ def game_over():
 
 
 def win():
+    win2.play()
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -262,9 +276,9 @@ def your_turn(mc, status, anim_timer, enemies_pos):
                 if event.type == pygame.KEYUP:
                     if event.key in mov:
                         if mc.move(event.key):
+                            step.play()
                             left -= 1
                             status.change_sprite("your_turn_1.png", 0, 1, 1)
-                            print(mc.coords(), enemies_pos)
                             if pygame.sprite.spritecollide(mc, enemies, True):
                                 enemies_pos.remove(mc.coords())
                             if not enemies:
@@ -300,18 +314,26 @@ def enemy_turn(mc, walls_pos, enemies_pos):
     return False
 
 
-def tag():
+def level_clear(mc, status):
+    mc.kill()
+    status.kill()
+    for i in enemies:
+        i.kill()
+    for i in walls:
+        i.kill()
+
+
+def tag(map_name):
     status = AnimatedSprite("your_turn_2.png", 0, 1, 1, 0, 0)
-    mc, walls_pos, enemies_pos = create_level(load_level('map.txt'))
+    mc, walls_pos, enemies_pos = create_level(load_level(map_name))
     anim_timer = 0
     while True:
         if your_turn(mc, status, anim_timer, enemies_pos):
-            win()
+            level_clear(mc, status)
+            return False
         if enemy_turn(mc, walls_pos, enemies_pos):
-            mc.kill()
-            status.kill()
-            enemies.empty()
-            return
+            level_clear(mc, status)
+            return True
 
 
 if __name__ == '__main__':
@@ -320,6 +342,10 @@ if __name__ == '__main__':
     size = width, height = 1280, 720
     screen = pygame.display.set_mode(size)
     screen.fill((255, 255, 255))
+
+    click, select, step = load_sound('click.wav'), load_sound('select.wav'),  load_sound('step.wav')
+
+    game_over_sound, win1, win2 = load_sound('game_over_sound.wav'), load_sound('win1.wav'),  load_sound('win2.wav')
 
     mov = {119: ("y", -80), 97: ("x", -80), 115: ("y", 80), 100: ("x", 80)}
 
@@ -331,24 +357,19 @@ if __name__ == '__main__':
     clock = pygame.time.Clock()
 
     started, lost = False, False
+    cur_map = 0
     while True:
         if not started and not lost:
             start_screen()
             started = True
         if started and not lost:
-            tag()
-            lost = True
-        if started and lost:
-            game_over()
-            lost = False
-'''
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                terminate()
-            if started:
-                if event.type == pygame.KEYUP:
-                    if event.key in mov:
-                        mc.move(event.key)
-                    if event.key == pygame.K_RETURN:
-                        pause()
-'''
+            lost = tag("map" + str(cur_map) + ".txt")
+            if lost:
+                game_over()
+                lost = False
+            else:
+                cur_map += 1
+                if cur_map > 5:
+                    win()
+                else:
+                    win1.play()
